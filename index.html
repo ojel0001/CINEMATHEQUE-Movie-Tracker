@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cinémathèque - Movie Explorer</title>
+    <link rel="stylesheet" href="./main.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header-title">
+            <div class="header-line"></div>
+            <a href=""><h1>CINÉMATHÈQUE</h1></a>
+            <div class="header-line"></div>
+        </header>
+        <p class="subtitle">A Curated Collection</p>
+
+        <div class="search-container">
+            <div class="search-wrapper">
+                <input type="text" id="keyword" class="search-input" placeholder="Search for movies...">
+                <select id="sortList"  class="select-input">
+                    <option value="popularity">Popularity</option>
+                    <option value="release-date">Release Date</option>
+                    <option value="vote">Votes</option>
+                </select>
+                <button class="btn full" id="searchBtn">Search</button>
+            </div>
+        </div>
+        <div id="displayContainer"></div>
+        <div class="results-info" id="resultsInfo">
+            <p class="results-text" id="resultsText"></p>
+        </div>
+        <button class="btn-save-movies" onclick="showSavedMoviesView()">Saved Movies</button>
+    </div>
+
+    <script src="./main.js"></script>
+</body>
+</html>

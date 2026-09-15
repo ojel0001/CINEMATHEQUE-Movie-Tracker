@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Offline - Cinémathèque</title>
+    <link rel="stylesheet" href="./main.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header-title">
+            <div class="header-line"></div>
+            <a href=""><h1>CINÉMATHÈQUE</h1></a>
+            <div class="header-line"></div>
+        </header>
+        <p class="subtitle">You're Offline</p>
+
+        <div class="results-info">
+            <p class="results-text">Saved Movies</p>
+        </div>
+
+        <div id="offlineDisplay"></div>
+
+        <button class="btn" id="retryBtn" style="display: none;">Retry Connection</button>
+    </div>
+
+    <script>
+        const offlineDisplay = document.getElementById("offlineDisplay");
+        const retryBtn = document.getElementById("retryBtn");
+
+        // ============================================================
+        // LOAD SAVED MOVIES FROM SERVICE WORKER
+        // ============================================================
+        async function loadSavedMovies() {
+            offlineDisplay.innerHTML = "<p>Loading saved movies...</p>";
+
+            // If no service worker controller, show fallback
+            if (!navigator.serviceWorker || !navigator.serviceWorker.controller) {
+                offlineDisplay.innerHTML = `
+                    <p class="no-results">Saved movies unavailable. Please reconnect and refresh.</p>
+                `;
+                return;
+            }
+
+            try {
+                const messageChannel = new MessageChannel();
+
+                const movies = await new Promise((resolve, reject) => {
+                    navigator.serviceWorker.controller.postMessage(
+                        { action: "GET_SAVED_MOVIES" },
+                        [messageChannel.port2]
+                    );
+
+                    messageChannel.port1.onmessage = (event) => {
+                        if (event.data.success) {
+                            resolve(event.data.movies);
+                        } else {
+                            reject(new Error(event.data.error));
+                        }
+                    };
+
+                    // Timeout in case service worker never replies
+                    setTimeout(() => reject(new Error("Service worker timeout")), 5000);
+                });
+
+                renderMovies(movies);
+            } catch (error) {
+                console.error("Offline page error:", error);
+                offlineDisplay.innerHTML = `
+                    <p class="no-results">Could not load saved movies. Please try again.</p>
+                `;
+            }
+        }
+
+        // ============================================================
+        // RENDER MOVIES GRID (using existing CSS classes)
+        // ============================================================
+        function renderMovies(movies) {
+            if (!movies || movies.length === 0) {
+                offlineDisplay.innerHTML = `
+                    <p class="no-results">No saved movies yet. Reconnect and save some movies for offline viewing!</p>
+                `;
+                return;
+            }
+
+            const grid = document.createElement("div");
+            grid.classList.add("movies-grid");
+
+            movies.forEach((movie) => {
+                const card = document.createElement("div");
+                card.classList.add("movie-card");
+
+                // Prefer cached poster URL from service worker
+                const imageUrl = movie.posterUrl
+                    ? movie.posterUrl
+                    : movie.poster_path
+                        ? `https://image.tmdb.org/t/p/w500${movie.poster_path}`
+                        : "";
+
+                const year = movie.year || "N/A";
+                const rating = movie.rating ? Number(movie.rating).toFixed(1) : "N/A";
+
+                card.innerHTML = `
+                    <div class="movie-poster">
+                        <img src="${imageUrl}" alt="${escapeHtml(movie.title)}">
+                        <div class="movie-poster-overlay"></div>
+                    </div>
+
+                    <div class="movie-info">
+                        <h3 class="movie-title">${escapeHtml(movie.title)}</h3>
+
+                        <div class="movie-meta">
+                            <span>${year}</span>
+                            <div class="movie-rating">
+                                <span class="star">★</span>
+                                <span>${rating}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                // Show overview when clicked
+                card.addEventListener("click", () => {
+                    showOfflineDetails(movie, imageUrl, year, rating);
+                });
+
+                grid.appendChild(card);
+            });
+
+            offlineDisplay.innerHTML = "";
+            offlineDisplay.appendChild(grid);
+        }
+
+        // ============================================================
+        // SHOW MOVIE DETAILS IN OFFLINE MODAL
+        // ============================================================
+        function showOfflineDetails(movie, imageUrl, year, rating) {
+            const modal = document.createElement("div");
+            modal.classList.add("modal-overlay", "active");
+
+            modal.innerHTML = `
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h2 class="modal-title">${escapeHtml(movie.title)}</h2>
+                        <button class="modal-close" id="offlineCloseBtn">✕</button>
+                    </div>
+
+                    <div class="modal-body">
+                        <div class="modal-layout">
+                            <div class="modal-poster-container">
+                                <div class="modal-poster">
+                                    <img src="${imageUrl}" alt="${escapeHtml(movie.title)}">
+                                </div>
+                            </div>
+
+                            <div class="modal-details">
+                                <div class="detail-section">
+                                    <div class="detail-header">
+                                        <div class="detail-line"></div>
+                                        <span class="detail-label">Overview</span>
+                                    </div>
+                                    <p class="overview-text">
+                                        ${escapeHtml(movie.overview) || "No overview available."}
+                                    </p>
+                                </div>
+
+                                <div class="detail-section">
+                                    <div class="detail-header">
+                                        <div class="detail-line"></div>
+                                        <span class="detail-label">Release Date</span>
+                                    </div>
+                                    <p class="detail-content">${year}</p>
+                                </div>
+
+                                <div class="detail-section">
+                                    <div class="detail-header">
+                                        <div class="detail-line"></div>
+                                        <span class="detail-label">Vote Average</span>
+                                    </div>
+                                    <div class="rating-display">
+                                        <span class="rating-star">★</span>
+                                        <span class="rating-value">${rating}</span>
+                                        <span class="rating-max">/ 10</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            document.body.appendChild(modal);
+
+            const closeBtn = modal.querySelector("#offlineCloseBtn");
+            closeBtn.addEventListener("click", () => modal.remove());
+
+            modal.addEventListener("click", (e) => {
+                if (e.target === modal) modal.remove();
+            });
+        }
+
+        // ============================================================
+        // ESCAPE HTML
+        // ============================================================
+        function escapeHtml(str) {
+            if (!str) return "";
+            return str
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#39;");
+        }
+
+        // ============================================================
+        // CONNECTION MONITORING
+        // ============================================================
+        function updateConnectionUI() {
+            if (navigator.onLine) {
+                retryBtn.style.display = "block";
+                retryBtn.textContent = "You're back online — click to reload";
+            } else {
+                retryBtn.style.display = "block";
+                retryBtn.textContent = "Retry Connection";
+            }
+        }
+
+        retryBtn.addEventListener("click", () => {
+            if (navigator.onLine) {
+                window.location.href = "./index.html";
+            } else {
+                // Try again — maybe transient
+                loadSavedMovies();
+                retryBtn.textContent = "Still offline...";
+                setTimeout(updateConnectionUI, 2000);
+            }
+        });
+
+        // Auto-redirect when connection returns
+        window.addEventListener("online", () => {
+            window.location.href ="./index.html";
+        });
+
+        // ============================================================
+        // INIT
+        // ============================================================
+        document.addEventListener("DOMContentLoaded", () => {
+            loadSavedMovies();
+            updateConnectionUI();
+        });
+    </script>
+</body>
+</html>
